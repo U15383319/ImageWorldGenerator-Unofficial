@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "eu.pollux28.imggen.mixins",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinAbstractPiglin",
+    "MixinChunkMap",
+    "MixinHoglin",
+    "MixinLakeFeature"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}
