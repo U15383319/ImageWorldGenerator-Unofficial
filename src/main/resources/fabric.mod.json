@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "imggen",
+  "version": "${version}",
+  "name": "Image World Generator",
+  "description": "Minecraft mod to generate a world from images.",
+  "authors": [
+    "28Pollux28"
+  ],
+  "contributors": [
+    "Jiogo18",
+    "Octanne",
+    "Simon511000"
+  ],
+  "contact": {
+    "homepage": "https://www.curseforge.com/minecraft/mc-mods/image-world-generator",
+    "sources": "https://github.com/28Pollux28/ImageWorldGenerator",
+    "issues": "https://github.com/28Pollux28/ImageWorldGenerator/issues"
+  },
+  "license": "LGPL-3.0",
+  "icon": "assets/imggen/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "eu.pollux28.imggen.ImgGen"
+    ]
+  },
+  "mixins": [
+    "imggen.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.2",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}
