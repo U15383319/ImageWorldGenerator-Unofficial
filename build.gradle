@@ -39,7 +39,7 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-	modImplementation "xaero.map:xaeroworldmap-fabric-${project.minecraft_version}:1.40.16"
+	modImplementation "xaero.map:xaeroworldmap-fabric-${project.minecraft_version}:1.42.0"
 }
 
 processResources {
