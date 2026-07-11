@@ -26,6 +26,7 @@ import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -373,7 +374,11 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
     ) {
         return delegate.fillFromNoise(executor, blender, randomState, structureManager, chunkAccess)
                 .thenApply(generatedChunk -> {
-                    applyImageHeightmap(generatedChunk);
+                    if (ImgGen.CONFIG.customHeightMap) {
+                        applyImageHeightmap(generatedChunk);
+                    } else {
+                        applyImageBiomeTerrain(generatedChunk);
+                    }
                     return generatedChunk;
                 });
     }
@@ -519,6 +524,134 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
         }
 
         Heightmap.primeHeightmaps(chunkAccess, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG));
+    }
+
+    private void applyImageBiomeTerrain(ChunkAccess chunkAccess) {
+        if (!(biomeSource instanceof ImgGenBiomeSource imgGenBiomeSource)) {
+            return;
+        }
+
+        ChunkPos chunkPos = chunkAccess.getPos();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+        boolean changed = false;
+
+        for (int localX = 0; localX < 16; localX++) {
+            int worldX = chunkPos.getMinBlockX() + localX;
+            for (int localZ = 0; localZ < 16; localZ++) {
+                int worldZ = chunkPos.getMinBlockZ() + localZ;
+                if (!ImgGen.CONFIG.repeatBiomeImage
+                        && !imgGenBiomeSource.getBiomeDataProvider().isInImage(worldX, worldZ)) {
+                    continue;
+                }
+
+                int currentSurface = chunkAccess.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, localX, localZ);
+                OptionalInt minimumSurface = getMinimumLandSurface(
+                        imgGenBiomeSource,
+                        worldX,
+                        worldZ,
+                        currentSurface
+                );
+                if (minimumSurface.isEmpty()) {
+                    continue;
+                }
+
+                int targetSurface = Mth.clamp(
+                        minimumSurface.getAsInt(),
+                        chunkAccess.getMinBuildHeight() + 1,
+                        chunkAccess.getMaxBuildHeight() - 1
+                );
+                if (currentSurface >= targetSurface) {
+                    continue;
+                }
+
+                for (int y = currentSurface + 1; y <= targetSurface; y++) {
+                    mutable.set(worldX, y, worldZ);
+                    BlockState state = chunkAccess.getBlockState(mutable);
+                    if (state.isAir() || !state.getFluidState().isEmpty()) {
+                        chunkAccess.setBlockState(mutable, settings.value().defaultBlock(), false);
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if (changed) {
+            Heightmap.primeHeightmaps(chunkAccess, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG));
+        }
+    }
+
+    private OptionalInt getMinimumLandSurface(
+            ImgGenBiomeSource imgGenBiomeSource,
+            int x,
+            int z,
+            int currentSurface
+    ) {
+        Holder<Biome> centerBiome = imgGenBiomeSource.getImageBiome(x, z);
+        if (!isLandBiome(centerBiome)) {
+            return OptionalInt.empty();
+        }
+
+        int landSurface = getSeaLevel() + 1;
+        if (currentSurface >= landSurface) {
+            return OptionalInt.empty();
+        }
+
+        int radius = Math.max(8, Math.round(ImgGen.CONFIG.biomesImageScale * 8.0F));
+        int[][] neighbors = {
+                {-radius, 0, 2},
+                {radius, 0, 2},
+                {0, -radius, 2},
+                {0, radius, 2},
+                {-radius, -radius, 1},
+                {-radius, radius, 1},
+                {radius, -radius, 1},
+                {radius, radius, 1}
+        };
+        int landWeight = 4;
+        int totalWeight = 4;
+
+        for (int[] neighbor : neighbors) {
+            int sampleX = x + neighbor[0];
+            int sampleZ = z + neighbor[1];
+            int weight = neighbor[2];
+            totalWeight += weight;
+            if (hasImageBiomeAt(imgGenBiomeSource, sampleX, sampleZ)
+                    && isLandBiome(imgGenBiomeSource.getImageBiome(sampleX, sampleZ))) {
+                landWeight += weight;
+            }
+        }
+
+        double landRatio = (double) landWeight / totalWeight;
+        if (landRatio <= 0.5D) {
+            return OptionalInt.empty();
+        }
+
+        double blend = Mth.clamp((landRatio - 0.5D) * 2.0D, 0.0D, 1.0D);
+        blend = blend * blend * (3.0D - 2.0D * blend);
+        int targetSurface = currentSurface + (int) Math.ceil((landSurface - currentSurface) * blend);
+        return OptionalInt.of(targetSurface);
+    }
+
+    private boolean hasImageBiomeAt(ImgGenBiomeSource imgGenBiomeSource, int x, int z) {
+        return ImgGen.CONFIG.repeatBiomeImage || imgGenBiomeSource.getBiomeDataProvider().isInImage(x, z);
+    }
+
+    private boolean isLandBiome(Holder<Biome> biome) {
+        return !isOceanOrRiver(biome) && !biome.is(Biomes.THE_VOID);
+    }
+
+    private boolean isOceanOrRiver(Holder<Biome> biome) {
+        return biome.is(Biomes.OCEAN)
+                || biome.is(Biomes.WARM_OCEAN)
+                || biome.is(Biomes.LUKEWARM_OCEAN)
+                || biome.is(Biomes.COLD_OCEAN)
+                || biome.is(Biomes.FROZEN_OCEAN)
+                || biome.is(Biomes.DEEP_OCEAN)
+                || biome.is(Biomes.DEEP_LUKEWARM_OCEAN)
+                || biome.is(Biomes.DEEP_COLD_OCEAN)
+                || biome.is(Biomes.DEEP_FROZEN_OCEAN)
+                || biome.is(Biomes.RIVER)
+                || biome.is(Biomes.FROZEN_RIVER);
     }
 
     private BlockState getStateForHeight(int y, int height, int minY) {
