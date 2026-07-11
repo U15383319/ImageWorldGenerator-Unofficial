@@ -10,6 +10,7 @@ import eu.pollux28.imggen.gen.structures.StructuresSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
@@ -51,6 +52,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Predicate;
 import java.util.concurrent.CompletableFuture;
@@ -64,6 +66,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
     private static final BlockState BEDROCK = Blocks.BEDROCK.defaultBlockState();
+    private static final int[] TERRAIN_BLEND_KERNEL = {1, 2, 3, 2, 1};
 
     private final Holder<NoiseGeneratorSettings> settings;
     private final Holder<NoiseGeneratorSettings> effectiveSettings;
@@ -405,21 +408,74 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
             return terrainTop;
         }
 
+        Optional<ImageTerrainProfile> terrainProfile = getImageTerrainProfile(x, z);
+        if (terrainProfile.isPresent()) {
+            int currentSurface = delegate.getBaseHeight(
+                    x,
+                    z,
+                    Heightmap.Types.OCEAN_FLOOR_WG,
+                    levelHeightAccessor,
+                    randomState
+            ) - 1;
+            int adjustedSurface = clampTerrainSurface(
+                    adjustTerrainSurface(currentSurface, terrainProfile.get()),
+                    levelHeightAccessor
+            );
+            int terrainTop = adjustedSurface + 1;
+            return countsFluidForHeight(type) ? Math.max(terrainTop, getSeaLevel()) : terrainTop;
+        }
+
         return delegate.getBaseHeight(x, z, type, levelHeightAccessor, randomState);
     }
 
     @Override
     public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor levelHeightAccessor, RandomState randomState) {
         OptionalInt imageHeight = getImageHeight(x, z, levelHeightAccessor);
-        if (imageHeight.isEmpty()) {
-            return delegate.getBaseColumn(x, z, levelHeightAccessor, randomState);
+        if (imageHeight.isPresent()) {
+            int minY = levelHeightAccessor.getMinBuildHeight();
+            BlockState[] states = new BlockState[levelHeightAccessor.getHeight()];
+            for (int i = 0; i < states.length; i++) {
+                int y = minY + i;
+                states[i] = getStateForHeight(y, imageHeight.getAsInt(), minY);
+            }
+
+            return new NoiseColumn(minY, states);
+        }
+
+        NoiseColumn delegateColumn = delegate.getBaseColumn(x, z, levelHeightAccessor, randomState);
+        Optional<ImageTerrainProfile> terrainProfile = getImageTerrainProfile(x, z);
+        if (terrainProfile.isEmpty()) {
+            return delegateColumn;
+        }
+
+        int currentSurface = delegate.getBaseHeight(
+                x,
+                z,
+                Heightmap.Types.OCEAN_FLOOR_WG,
+                levelHeightAccessor,
+                randomState
+        ) - 1;
+        int adjustedSurface = clampTerrainSurface(
+                adjustTerrainSurface(currentSurface, terrainProfile.get()),
+                levelHeightAccessor
+        );
+        if (adjustedSurface == currentSurface) {
+            return delegateColumn;
         }
 
         int minY = levelHeightAccessor.getMinBuildHeight();
         BlockState[] states = new BlockState[levelHeightAccessor.getHeight()];
         for (int i = 0; i < states.length; i++) {
             int y = minY + i;
-            states[i] = getStateForHeight(y, imageHeight.getAsInt(), minY);
+            BlockState state = delegateColumn.getBlock(y);
+            if (adjustedSurface > currentSurface && y > currentSurface && y <= adjustedSurface) {
+                state = settings.value().defaultBlock();
+            } else if (adjustedSurface < currentSurface && y == adjustedSurface) {
+                state = settings.value().defaultBlock();
+            } else if (adjustedSurface < currentSurface && y > adjustedSurface && y <= currentSurface) {
+                state = getStateAboveTerrain(y);
+            }
+            states[i] = state;
         }
 
         return new NoiseColumn(minY, states);
@@ -527,51 +583,60 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
     }
 
     private void applyImageBiomeTerrain(ChunkAccess chunkAccess) {
-        if (!(biomeSource instanceof ImgGenBiomeSource imgGenBiomeSource)) {
+        if (!(biomeSource instanceof ImgGenBiomeSource)) {
             return;
         }
 
         ChunkPos chunkPos = chunkAccess.getPos();
         BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+        ImageTerrainProfile[][] terrainProfiles = new ImageTerrainProfile[4][4];
         boolean changed = false;
+
+        for (int cellX = 0; cellX < 4; cellX++) {
+            for (int cellZ = 0; cellZ < 4; cellZ++) {
+                int worldX = chunkPos.getMinBlockX() + cellX * QuartPos.SIZE;
+                int worldZ = chunkPos.getMinBlockZ() + cellZ * QuartPos.SIZE;
+                terrainProfiles[cellX][cellZ] = getImageTerrainProfile(worldX, worldZ).orElse(null);
+            }
+        }
 
         for (int localX = 0; localX < 16; localX++) {
             int worldX = chunkPos.getMinBlockX() + localX;
             for (int localZ = 0; localZ < 16; localZ++) {
                 int worldZ = chunkPos.getMinBlockZ() + localZ;
-                if (!ImgGen.CONFIG.repeatBiomeImage
-                        && !imgGenBiomeSource.getBiomeDataProvider().isInImage(worldX, worldZ)) {
+                ImageTerrainProfile terrainProfile = terrainProfiles[localX >> QuartPos.BITS][localZ >> QuartPos.BITS];
+                if (terrainProfile == null) {
                     continue;
                 }
 
                 int currentSurface = chunkAccess.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, localX, localZ);
-                OptionalInt minimumSurface = getMinimumLandSurface(
-                        imgGenBiomeSource,
-                        worldX,
-                        worldZ,
-                        currentSurface
-                );
-                if (minimumSurface.isEmpty()) {
-                    continue;
-                }
-
                 int targetSurface = Mth.clamp(
-                        minimumSurface.getAsInt(),
+                        adjustTerrainSurface(currentSurface, terrainProfile),
                         chunkAccess.getMinBuildHeight() + 1,
                         chunkAccess.getMaxBuildHeight() - 1
                 );
-                if (currentSurface >= targetSurface) {
+                if (currentSurface == targetSurface) {
                     continue;
                 }
 
-                for (int y = currentSurface + 1; y <= targetSurface; y++) {
-                    mutable.set(worldX, y, worldZ);
-                    BlockState state = chunkAccess.getBlockState(mutable);
-                    if (state.isAir() || !state.getFluidState().isEmpty()) {
+                if (targetSurface > currentSurface) {
+                    for (int y = currentSurface + 1; y <= targetSurface; y++) {
+                        mutable.set(worldX, y, worldZ);
                         chunkAccess.setBlockState(mutable, settings.value().defaultBlock(), false);
-                        changed = true;
+                    }
+                } else {
+                    mutable.set(worldX, targetSurface, worldZ);
+                    chunkAccess.setBlockState(mutable, settings.value().defaultBlock(), false);
+                    for (int y = targetSurface + 1; y <= currentSurface; y++) {
+                        mutable.set(worldX, y, worldZ);
+                        BlockState replacement = getStateAboveTerrain(y);
+                        chunkAccess.setBlockState(mutable, replacement, false);
+                        if (!replacement.getFluidState().isEmpty()) {
+                            chunkAccess.markPosForPostprocessing(mutable);
+                        }
                     }
                 }
+                changed = true;
             }
         }
 
@@ -580,78 +645,129 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
         }
     }
 
-    private OptionalInt getMinimumLandSurface(
-            ImgGenBiomeSource imgGenBiomeSource,
-            int x,
-            int z,
-            int currentSurface
-    ) {
-        Holder<Biome> centerBiome = imgGenBiomeSource.getImageBiome(x, z);
-        if (!isLandBiome(centerBiome)) {
-            return OptionalInt.empty();
+    private Optional<ImageTerrainProfile> getImageTerrainProfile(int x, int z) {
+        if (!(biomeSource instanceof ImgGenBiomeSource imgGenBiomeSource)) {
+            return Optional.empty();
         }
 
-        int landSurface = getSeaLevel() + 1;
-        if (currentSurface >= landSurface) {
-            return OptionalInt.empty();
+        int centerX = QuartPos.toBlock(QuartPos.fromBlock(x));
+        int centerZ = QuartPos.toBlock(QuartPos.fromBlock(z));
+        if (!hasImageBiomeAt(imgGenBiomeSource, centerX, centerZ)) {
+            return Optional.empty();
         }
 
-        int radius = Math.max(8, Math.round(ImgGen.CONFIG.biomesImageScale * 8.0F));
-        int[][] neighbors = {
-                {-radius, 0, 2},
-                {radius, 0, 2},
-                {0, -radius, 2},
-                {0, radius, 2},
-                {-radius, -radius, 1},
-                {-radius, radius, 1},
-                {radius, -radius, 1},
-                {radius, radius, 1}
-        };
-        int landWeight = 4;
-        int totalWeight = 4;
+        TerrainKind centerKind = getTerrainKind(imgGenBiomeSource.getImageBiome(centerX, centerZ));
+        if (centerKind == TerrainKind.VOID) {
+            return Optional.empty();
+        }
 
-        for (int[] neighbor : neighbors) {
-            int sampleX = x + neighbor[0];
-            int sampleZ = z + neighbor[1];
-            int weight = neighbor[2];
-            totalWeight += weight;
-            if (hasImageBiomeAt(imgGenBiomeSource, sampleX, sampleZ)
-                    && isLandBiome(imgGenBiomeSource.getImageBiome(sampleX, sampleZ))) {
-                landWeight += weight;
+        int weightedSurface = 0;
+        int totalWeight = 0;
+        int landWeight = 0;
+        for (int offsetX = -2; offsetX <= 2; offsetX++) {
+            for (int offsetZ = -2; offsetZ <= 2; offsetZ++) {
+                int sampleX = centerX + offsetX * QuartPos.SIZE;
+                int sampleZ = centerZ + offsetZ * QuartPos.SIZE;
+                if (!hasImageBiomeAt(imgGenBiomeSource, sampleX, sampleZ)) {
+                    continue;
+                }
+
+                TerrainKind kind = getTerrainKind(imgGenBiomeSource.getImageBiome(sampleX, sampleZ));
+                if (kind == TerrainKind.VOID) {
+                    continue;
+                }
+
+                int weight = TERRAIN_BLEND_KERNEL[offsetX + 2] * TERRAIN_BLEND_KERNEL[offsetZ + 2];
+                weightedSurface += (getSeaLevel() + kind.surfaceOffset) * weight;
+                totalWeight += weight;
+                if (kind.landLike) {
+                    landWeight += weight;
+                }
             }
         }
 
-        double landRatio = (double) landWeight / totalWeight;
-        if (landRatio <= 0.5D) {
-            return OptionalInt.empty();
+        if (totalWeight == 0) {
+            return Optional.empty();
         }
 
-        double blend = Mth.clamp((landRatio - 0.5D) * 2.0D, 0.0D, 1.0D);
-        blend = blend * blend * (3.0D - 2.0D * blend);
-        int targetSurface = currentSurface + (int) Math.ceil((landSurface - currentSurface) * blend);
-        return OptionalInt.of(targetSurface);
+        int targetSurface = Math.round((float) weightedSurface / totalWeight);
+        if (!centerKind.landLike) {
+            targetSurface = Math.min(targetSurface, getSeaLevel() - 2);
+        }
+        boolean landSupported = centerKind.landLike && landWeight * 2 > totalWeight;
+        return Optional.of(new ImageTerrainProfile(targetSurface, landSupported));
+    }
+
+    private int adjustTerrainSurface(int currentSurface, ImageTerrainProfile terrainProfile) {
+        return terrainProfile.landSupported
+                ? Math.max(currentSurface, terrainProfile.targetSurface)
+                : Math.min(currentSurface, terrainProfile.targetSurface);
+    }
+
+    private int clampTerrainSurface(int surface, LevelHeightAccessor levelHeightAccessor) {
+        return Mth.clamp(
+                surface,
+                levelHeightAccessor.getMinBuildHeight() + 1,
+                levelHeightAccessor.getMaxBuildHeight() - 1
+        );
+    }
+
+    private BlockState getStateAboveTerrain(int y) {
+        return y < getSeaLevel() ? settings.value().defaultFluid() : AIR;
     }
 
     private boolean hasImageBiomeAt(ImgGenBiomeSource imgGenBiomeSource, int x, int z) {
         return ImgGen.CONFIG.repeatBiomeImage || imgGenBiomeSource.getBiomeDataProvider().isInImage(x, z);
     }
 
-    private boolean isLandBiome(Holder<Biome> biome) {
-        return !isOceanOrRiver(biome) && !biome.is(Biomes.THE_VOID);
-    }
-
-    private boolean isOceanOrRiver(Holder<Biome> biome) {
-        return biome.is(Biomes.OCEAN)
+    private TerrainKind getTerrainKind(Holder<Biome> biome) {
+        if (biome.is(Biomes.THE_VOID)) {
+            return TerrainKind.VOID;
+        }
+        if (biome.is(Biomes.DEEP_OCEAN)
+                || biome.is(Biomes.DEEP_LUKEWARM_OCEAN)
+                || biome.is(Biomes.DEEP_COLD_OCEAN)
+                || biome.is(Biomes.DEEP_FROZEN_OCEAN)) {
+            return TerrainKind.DEEP_OCEAN;
+        }
+        if (biome.is(Biomes.OCEAN)
                 || biome.is(Biomes.WARM_OCEAN)
                 || biome.is(Biomes.LUKEWARM_OCEAN)
                 || biome.is(Biomes.COLD_OCEAN)
-                || biome.is(Biomes.FROZEN_OCEAN)
-                || biome.is(Biomes.DEEP_OCEAN)
-                || biome.is(Biomes.DEEP_LUKEWARM_OCEAN)
-                || biome.is(Biomes.DEEP_COLD_OCEAN)
-                || biome.is(Biomes.DEEP_FROZEN_OCEAN)
-                || biome.is(Biomes.RIVER)
-                || biome.is(Biomes.FROZEN_RIVER);
+                || biome.is(Biomes.FROZEN_OCEAN)) {
+            return TerrainKind.OCEAN;
+        }
+        if (biome.is(Biomes.RIVER) || biome.is(Biomes.FROZEN_RIVER)) {
+            return TerrainKind.RIVER;
+        }
+        if (biome.is(Biomes.SWAMP) || biome.is(Biomes.MANGROVE_SWAMP)) {
+            return TerrainKind.WETLAND;
+        }
+        if (biome.is(Biomes.BEACH) || biome.is(Biomes.SNOWY_BEACH) || biome.is(Biomes.STONY_SHORE)) {
+            return TerrainKind.SHORE;
+        }
+        return TerrainKind.LAND;
+    }
+
+    private record ImageTerrainProfile(int targetSurface, boolean landSupported) {
+    }
+
+    private enum TerrainKind {
+        LAND(1, true),
+        SHORE(0, true),
+        WETLAND(-2, true),
+        RIVER(-4, false),
+        OCEAN(-15, false),
+        DEEP_OCEAN(-30, false),
+        VOID(0, false);
+
+        private final int surfaceOffset;
+        private final boolean landLike;
+
+        TerrainKind(int surfaceOffset, boolean landLike) {
+            this.surfaceOffset = surfaceOffset;
+            this.landLike = landLike;
+        }
     }
 
     private BlockState getStateForHeight(int y, int height, int minY) {
