@@ -97,6 +97,11 @@ public class ImgGenBiomeSource extends BiomeSource {
         return biomeDataProvider;
     }
 
+    public Holder<Biome> getImageBiome(int blockX, int blockZ) {
+        ensureLoaded();
+        return biomeDataProvider.getData(blockX, blockZ, defaultBiome);
+    }
+
     private void ensureLoaded() {
         if (biomeDataProvider == null || biomeColorConverter == null || defaultBiome == null) {
             reloadFromConfig();
