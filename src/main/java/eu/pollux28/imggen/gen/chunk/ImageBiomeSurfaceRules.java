@@ -21,6 +21,7 @@ final class ImageBiomeSurfaceRules {
     private static final SurfaceRules.RuleSource CRIMSON_NYLIUM = blockRule(Blocks.CRIMSON_NYLIUM);
     private static final SurfaceRules.RuleSource GRAVEL = blockRule(Blocks.GRAVEL);
     private static final SurfaceRules.RuleSource END_STONE = blockRule(Blocks.END_STONE);
+    private static final SurfaceRules.RuleSource SCULK = blockRule(Blocks.SCULK);
 
     private ImageBiomeSurfaceRules() {
     }
@@ -51,6 +52,10 @@ final class ImageBiomeSurfaceRules {
         );
 
         return SurfaceRules.sequence(
+                SurfaceRules.ifTrue(
+                        SurfaceRules.isBiome(Biomes.DEEP_DARK),
+                        SurfaceRules.ifTrue(SurfaceRules.ON_FLOOR, SCULK)
+                ),
                 SurfaceRules.ifTrue(
                         netherBiome,
                         SurfaceRules.sequence(bedrockFloor, createNetherSurfaceRule(seaLevel))
