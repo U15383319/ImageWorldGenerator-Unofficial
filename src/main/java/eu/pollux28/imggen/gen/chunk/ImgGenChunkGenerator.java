@@ -16,6 +16,8 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.tags.BiomeTags;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.random.WeightedRandomList;
 import net.minecraft.world.entity.MobCategory;
@@ -66,6 +68,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
     private static final BlockState BEDROCK = Blocks.BEDROCK.defaultBlockState();
+    private static final BlockState LAVA = Blocks.LAVA.defaultBlockState();
     private static final BlockState VOID_AIR = Blocks.VOID_AIR.defaultBlockState();
     private static final int[] TERRAIN_BLEND_KERNEL = {1, 2, 3, 2, 1};
 
@@ -120,6 +123,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
     @Override
     public void buildSurface(WorldGenRegion worldGenRegion, StructureManager structureManager, RandomState randomState, ChunkAccess chunkAccess) {
         delegate.buildSurface(worldGenRegion, structureManager, randomState, chunkAccess);
+        replaceResidualOverworldNoiseMaterials(chunkAccess, randomState);
     }
 
     @Override
@@ -383,6 +387,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
                     } else {
                         applyImageBiomeTerrain(generatedChunk);
                     }
+                    applyDimensionBiomeFluids(generatedChunk, randomState);
                     applyVoidBiomes(generatedChunk);
                     return generatedChunk;
                 });
@@ -533,7 +538,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
                 baseSettings.defaultBlock(),
                 baseSettings.defaultFluid(),
                 imageRouter,
-                baseSettings.surfaceRule(),
+                ImageBiomeSurfaceRules.create(baseSettings.surfaceRule(), baseSettings.seaLevel()),
                 baseSettings.spawnTarget(),
                 baseSettings.seaLevel(),
                 baseSettings.disableMobGeneration(),
@@ -763,6 +768,104 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
                 surface,
                 levelHeightAccessor.getMinBuildHeight() + 1,
                 levelHeightAccessor.getMaxBuildHeight() - 1
+        );
+    }
+
+    private void applyDimensionBiomeFluids(ChunkAccess chunkAccess, RandomState randomState) {
+        BlockState defaultFluid = settings.value().defaultFluid();
+        if (defaultFluid.getFluidState().isEmpty() || defaultFluid.is(Blocks.LAVA)) {
+            return;
+        }
+
+        ChunkPos chunkPos = chunkAccess.getPos();
+        int minY = chunkAccess.getMinBuildHeight();
+        int maxY = chunkAccess.getMaxBuildHeight();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+
+        for (int cellX = 0; cellX < QuartPos.SIZE; cellX++) {
+            int firstLocalX = cellX * QuartPos.SIZE;
+            int sampleX = chunkPos.getMinBlockX() + firstLocalX;
+            for (int cellZ = 0; cellZ < QuartPos.SIZE; cellZ++) {
+                int firstLocalZ = cellZ * QuartPos.SIZE;
+                int sampleZ = chunkPos.getMinBlockZ() + firstLocalZ;
+                Holder<Biome> biome = getColumnBiome(sampleX, sampleZ, randomState);
+                if (!biome.is(BiomeTags.IS_NETHER)) {
+                    continue;
+                }
+
+                for (int offsetX = 0; offsetX < QuartPos.SIZE; offsetX++) {
+                    int worldX = sampleX + offsetX;
+                    for (int offsetZ = 0; offsetZ < QuartPos.SIZE; offsetZ++) {
+                        int worldZ = sampleZ + offsetZ;
+                        for (int y = minY; y < maxY; y++) {
+                            mutable.set(worldX, y, worldZ);
+                            if (chunkAccess.getBlockState(mutable).equals(defaultFluid)) {
+                                chunkAccess.setBlockState(mutable, LAVA, false);
+                                chunkAccess.markPosForPostprocessing(mutable);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void replaceResidualOverworldNoiseMaterials(ChunkAccess chunkAccess, RandomState randomState) {
+        ChunkPos chunkPos = chunkAccess.getPos();
+        int minY = chunkAccess.getMinBuildHeight();
+        int maxY = chunkAccess.getMaxBuildHeight();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+
+        for (int cellX = 0; cellX < QuartPos.SIZE; cellX++) {
+            int firstLocalX = cellX * QuartPos.SIZE;
+            int sampleX = chunkPos.getMinBlockX() + firstLocalX;
+            for (int cellZ = 0; cellZ < QuartPos.SIZE; cellZ++) {
+                int firstLocalZ = cellZ * QuartPos.SIZE;
+                int sampleZ = chunkPos.getMinBlockZ() + firstLocalZ;
+                Holder<Biome> biome = getColumnBiome(sampleX, sampleZ, randomState);
+                BlockState replacement;
+                if (biome.is(BiomeTags.IS_NETHER)) {
+                    replacement = Blocks.NETHERRACK.defaultBlockState();
+                } else if (biome.is(BiomeTags.IS_END)) {
+                    replacement = Blocks.END_STONE.defaultBlockState();
+                } else {
+                    continue;
+                }
+
+                for (int offsetX = 0; offsetX < QuartPos.SIZE; offsetX++) {
+                    int worldX = sampleX + offsetX;
+                    for (int offsetZ = 0; offsetZ < QuartPos.SIZE; offsetZ++) {
+                        int worldZ = sampleZ + offsetZ;
+                        for (int y = minY; y < maxY; y++) {
+                            mutable.set(worldX, y, worldZ);
+                            BlockState state = chunkAccess.getBlockState(mutable);
+                            if (isOverworldNoiseMaterial(state)) {
+                                chunkAccess.setBlockState(mutable, replacement, false);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean isOverworldNoiseMaterial(BlockState state) {
+        return state.equals(settings.value().defaultBlock())
+                || state.is(BlockTags.BASE_STONE_OVERWORLD)
+                || state.is(Blocks.IRON_ORE)
+                || state.is(Blocks.DEEPSLATE_IRON_ORE)
+                || state.is(Blocks.RAW_IRON_BLOCK)
+                || state.is(Blocks.COPPER_ORE)
+                || state.is(Blocks.DEEPSLATE_COPPER_ORE)
+                || state.is(Blocks.RAW_COPPER_BLOCK);
+    }
+
+    private Holder<Biome> getColumnBiome(int blockX, int blockZ, RandomState randomState) {
+        return biomeSource.getNoiseBiome(
+                QuartPos.fromBlock(blockX),
+                QuartPos.fromBlock(getSeaLevel()),
+                QuartPos.fromBlock(blockZ),
+                randomState.sampler()
         );
     }
 
