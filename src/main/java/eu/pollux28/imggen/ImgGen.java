@@ -66,7 +66,6 @@ public class ImgGen implements ModInitializer {
     private void createImageDirectories() {
         try {
             Files.createDirectories(Paths.get("", "imggen", "image"));
-            Files.createDirectories(Paths.get("", "imggen", "image", "gen"));
         } catch (IOException e) {
             LOGGER.error("Could not create Image World Generator folders", e);
         }
