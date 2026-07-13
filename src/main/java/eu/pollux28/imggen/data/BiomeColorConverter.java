@@ -11,10 +11,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BiomeColorConverter implements ColorConverter<Holder<Biome>> {
     private final Holder<Biome> defaultValue;
     private final Map<Integer, Holder<Biome>> biomeColorMap;
+    private final Map<Integer, Holder<Biome>> resolvedColorCache;
 
     public BiomeColorConverter(Holder<Biome> defaultValue) {
         this.defaultValue = defaultValue;
         this.biomeColorMap = new ConcurrentHashMap<>();
+        this.resolvedColorCache = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -30,15 +32,7 @@ public class BiomeColorConverter implements ColorConverter<Holder<Biome>> {
             return defaultValue;
         }
 
-        biome = biomeColorMap.entrySet().stream().sequential()
-                .min(Comparator.comparingDouble(entry -> getColorDiff(finalColor, entry.getKey())))
-                .map(Map.Entry::getValue)
-                .orElse(defaultValue);
-
-        ImgGen.LOGGER.debug("Found unmapped color code {}. Mapping it to the nearest known biome color.", Integer.toHexString(finalColor));
-        RegisterBiome(finalColor, biome);
-
-        return biome;
+        return resolvedColorCache.computeIfAbsent(finalColor, this::findNearestBiome);
     }
 
     @Override
@@ -48,12 +42,27 @@ public class BiomeColorConverter implements ColorConverter<Holder<Biome>> {
 
     public void RegisterBiome(int color, Holder<Biome> biome) {
         int finalColor = color & 0x00FFFFFF;
-        if (biomeColorMap.containsKey(finalColor)) {
+        if (biomeColorMap.putIfAbsent(finalColor, biome) != null) {
             ImgGen.LOGGER.warn("There has already been a biome registered for color {}", Integer.toHexString(finalColor));
             return;
         }
 
-        biomeColorMap.put(finalColor, biome);
+        resolvedColorCache.clear();
+    }
+
+    private Holder<Biome> findNearestBiome(int color) {
+        Holder<Biome> biome = biomeColorMap.entrySet().stream()
+                .min(Comparator
+                        .<Map.Entry<Integer, Holder<Biome>>>comparingDouble(entry -> getColorDiff(color, entry.getKey()))
+                        .thenComparingInt(Map.Entry::getKey))
+                .map(Map.Entry::getValue)
+                .orElse(defaultValue);
+
+        ImgGen.LOGGER.debug(
+                "Found unmapped color code {}. Mapping it to the nearest known biome color.",
+                Integer.toHexString(color)
+        );
+        return biome;
     }
 
     private double getColorDiff(int rgb, int mappedRgb) {
