@@ -134,7 +134,8 @@ public record ImageTerrainDensityFunction(DensityFunction input) implements Dens
                 case River, Frozen_River -> new TerrainTarget(-0.12D, 0.45D);
                 case Beach, Snowy_Beach, Stony_Shore -> new TerrainTarget(0.03D, 0.55D);
                 case Swamp, Mangrove_Swamp -> new TerrainTarget(0.08D, 0.55D);
-                case Mountains, Windswept_Forest, Grove, Snowy_Slopes -> new TerrainTarget(0.38D, 0.55D);
+                case Windswept_Hills, Windswept_Gravelly_Hills, Windswept_Forest, Grove, Snowy_Slopes ->
+                        new TerrainTarget(0.38D, 0.55D);
                 case Jagged_Peaks, Frozen_Peaks, Stony_Peaks -> new TerrainTarget(0.55D, 0.6D);
                 case Savanna_Plateau, Badlands, Wooded_Badlands, Eroded_Badlands -> new TerrainTarget(0.28D, 0.55D);
                 case Mushroom_Fields, Meadow, Cherry_Grove -> new TerrainTarget(0.18D, 0.5D);

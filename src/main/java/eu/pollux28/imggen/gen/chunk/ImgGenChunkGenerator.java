@@ -66,6 +66,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
     private static final BlockState BEDROCK = Blocks.BEDROCK.defaultBlockState();
+    private static final BlockState VOID_AIR = Blocks.VOID_AIR.defaultBlockState();
     private static final int[] TERRAIN_BLEND_KERNEL = {1, 2, 3, 2, 1};
 
     private final Holder<NoiseGeneratorSettings> settings;
@@ -382,6 +383,7 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
                     } else {
                         applyImageBiomeTerrain(generatedChunk);
                     }
+                    applyVoidBiomes(generatedChunk);
                     return generatedChunk;
                 });
     }
@@ -642,6 +644,58 @@ public class ImgGenChunkGenerator extends ChunkGenerator {
 
         if (changed) {
             Heightmap.primeHeightmaps(chunkAccess, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG));
+        }
+    }
+
+    private void applyVoidBiomes(ChunkAccess chunkAccess) {
+        if (!(biomeSource instanceof ImgGenBiomeSource imgGenBiomeSource)) {
+            return;
+        }
+
+        ChunkPos chunkPos = chunkAccess.getPos();
+        int minY = chunkAccess.getMinBuildHeight();
+        int maxY = chunkAccess.getMaxBuildHeight();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+        Heightmap worldSurface = chunkAccess.getOrCreateHeightmapUnprimed(Heightmap.Types.WORLD_SURFACE_WG);
+        Heightmap oceanFloor = chunkAccess.getOrCreateHeightmapUnprimed(Heightmap.Types.OCEAN_FLOOR_WG);
+        boolean changed = false;
+
+        for (int cellX = 0; cellX < QuartPos.SIZE; cellX++) {
+            int firstLocalX = cellX * QuartPos.SIZE;
+            int sampleX = chunkPos.getMinBlockX() + firstLocalX;
+            for (int cellZ = 0; cellZ < QuartPos.SIZE; cellZ++) {
+                int firstLocalZ = cellZ * QuartPos.SIZE;
+                int sampleZ = chunkPos.getMinBlockZ() + firstLocalZ;
+                if (!hasImageBiomeAt(imgGenBiomeSource, sampleX, sampleZ)
+                        || !imgGenBiomeSource.getImageBiome(sampleX, sampleZ).is(Biomes.THE_VOID)) {
+                    continue;
+                }
+
+                for (int offsetX = 0; offsetX < QuartPos.SIZE; offsetX++) {
+                    int worldX = sampleX + offsetX;
+                    for (int offsetZ = 0; offsetZ < QuartPos.SIZE; offsetZ++) {
+                        int worldZ = sampleZ + offsetZ;
+                        for (int y = minY; y < maxY; y++) {
+                            mutable.set(worldX, y, worldZ);
+                            if (!chunkAccess.getBlockState(mutable).isAir()) {
+                                chunkAccess.setBlockState(mutable, VOID_AIR, false);
+                                int localX = firstLocalX + offsetX;
+                                int localZ = firstLocalZ + offsetZ;
+                                worldSurface.update(localX, y, localZ, VOID_AIR);
+                                oceanFloor.update(localX, y, localZ, VOID_AIR);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (changed) {
+            Heightmap.primeHeightmaps(
+                    chunkAccess,
+                    EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG, Heightmap.Types.OCEAN_FLOOR_WG)
+            );
         }
     }
 
