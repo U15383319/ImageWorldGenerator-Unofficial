@@ -1,0 +1,9 @@
+{
+  "generator.imggen.imggen": "图像世界",
+  "commands.imggen.not_image_world": "当前维度不是由 Image World Generator 生成的",
+  "commands.imggen.debug.biome": "%s, %s 处的群系：%s",
+  "commands.imggen.debug.pixel": "对应群系图像素 %s, %s，绘制的群系为 %s",
+  "commands.imggen.debug.outside_image": "位于群系图范围之外",
+  "commands.imggen.debug.terrain": "地形类型：%s",
+  "commands.imggen.debug.height": "高度图：Y %s"
+}
