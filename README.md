@@ -108,6 +108,25 @@ pixel (0-255) is the surface Y, and everything below `seaLevel` is flooded.
 
 Requires JDK 21. The jar is written to `build/libs/`.
 
+## Changes from the original
+
+This is a modified version of ImageWorldGenerator 1.3.2 by 28Pollux28 and its contributors Jiogo18, Octanne
+and Simon511000. It was ported and modified by Gvxwsur, starting in May 2026 with the Fabric 1.20.1 port and
+continuing since November 2026 with the NeoForge 1.21.1 version on this branch. The full history is in the
+commit log. In summary, compared to the original:
+
+- Ported from Fabric for Minecraft 1.16.5 to NeoForge for Minecraft 1.21.1; the source code was rewritten
+  for the new world generation of the game.
+- Terrain is shaped from the painted biomes by steering vanilla's noise instead of using per-biome depth,
+  which no longer exists.
+- The world type is provided as a data pack world preset.
+- Biomes of other mods get their own surface, terrain and colours (`/imggen colors`, TerraBlender support).
+- Outside the image the world is void by default instead of continuing with vanilla generation; added the
+  optional world border, and the spawn point is chosen inside the image.
+- Removed the `largeBiomes`, `segmentImageWidth`, `segmentImageHeight` and `imageCacheSize` options.
+
 ## License
 
-Licensed under [GNU LGPL-3.0](LICENSE), the same license as the original mod.
+Licensed under the [GNU Lesser General Public License, version 3](LICENSE), the same license as the
+original mod. That license is a set of additional permissions on top of the
+[GNU General Public License, version 3](COPYING), whose text is included as well.

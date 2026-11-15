@@ -110,7 +110,8 @@ tasks.withType(JavaCompile).configureEach {
 
 jar {
     def licenseSuffix = mod_id
-    from("LICENSE") {
+    // LGPL-3.0 (LICENSE) is a set of additions to GPL-3.0 (COPYING), so both texts travel with the jar.
+    from(files("LICENSE", "COPYING")) {
         rename { "${it}_${licenseSuffix}" }
     }
 }

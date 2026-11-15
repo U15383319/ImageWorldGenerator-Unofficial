@@ -10,7 +10,7 @@ displayName = "${mod_name}"
 displayURL = "https://github.com/U15383319/ImageWorldGenerator-Unofficial"
 logoFile = "icon.png"
 authors = "${mod_authors}"
-credits = "Unofficial port of ImageWorldGenerator by 28Pollux28"
+credits = "Unofficial port of ImageWorldGenerator by 28Pollux28 and contributors, ported and modified by Gvxwsur"
 description = '''${mod_description}'''
 
 [[mixins]]
