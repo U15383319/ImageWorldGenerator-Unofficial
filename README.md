@@ -32,8 +32,18 @@ listed in [`DefaultBiomeColors`](src/main/java/eu/pollux28/imggen/world/biome/De
 ```
 
 Colours that are not in the table fall back to the closest known colour, so save maps without
-anti-aliasing. Outside the image the world continues with vanilla generation (`continuousGen: true`) or
-consists of `defaultBiome` only.
+anti-aliasing.
+
+Outside the image the world consists of `defaultBiome` only. By default that is `minecraft:the_void`: the
+world simply ends at the edge of the image. Set it to `minecraft:ocean` for an endless sea instead, or turn
+on `continuousGen` to let vanilla generation take over out there.
+
+`limitWorldToImage: true` additionally puts the vanilla world border around the image when the world is
+created, which keeps players from walking off the edge. The border is always a square, so an image that is
+not square gets the square around its longer side. It is a normal world border: it also applies to the
+Nether and the End, and can be changed later with `/worldborder`.
+
+Players start on the dry land closest to the middle of the image.
 
 The terrain follows the painted biomes: oceans are deep, rivers cut valleys, peaks become mountains. Biomes
 are classified by their tags, so modded biomes get fitting terrain as well. Nether, End and void biomes can

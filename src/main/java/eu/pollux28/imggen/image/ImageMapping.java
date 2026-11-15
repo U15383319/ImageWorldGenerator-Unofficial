@@ -29,6 +29,25 @@ public record ImageMapping(int width, int height, float scale, boolean repeat, b
         return pixelIndex(blockX, blockZ) != OUTSIDE;
     }
 
+    /** Extent of the image along X in blocks. */
+    public double blockWidth() {
+        return (double) width * scale;
+    }
+
+    /** Extent of the image along Z in blocks. */
+    public double blockDepth() {
+        return (double) height * scale;
+    }
+
+    /** Block X of the middle of the image; not exactly 0 for an odd number of pixels. */
+    public double centerBlockX() {
+        return (width - 2 * (width / 2)) * scale / 2.0;
+    }
+
+    public double centerBlockZ() {
+        return (height - 2 * (height / 2)) * scale / 2.0;
+    }
+
     public int pixelX(int pixelIndex) {
         return pixelIndex % width;
     }

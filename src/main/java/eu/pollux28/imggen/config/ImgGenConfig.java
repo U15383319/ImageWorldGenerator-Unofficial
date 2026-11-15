@@ -29,10 +29,15 @@ public final class ImgGenConfig {
     public float biomesImageScale = 1;
     public boolean repeatBiomeImage = false;
     public boolean repeatMirrorBiomeImage = false;
-    /** Biome used outside the image when {@link #continuousGen} is off. */
-    public String defaultBiome = "minecraft:ocean";
+    /** Biome used outside the image when {@link #continuousGen} is off. The void means: the world ends there. */
+    public String defaultBiome = "minecraft:the_void";
     /** Outside the image: {@code true} continues with vanilla generation, {@code false} uses {@link #defaultBiome}. */
-    public boolean continuousGen = true;
+    public boolean continuousGen = false;
+    /**
+     * Puts the vanilla world border around the biome image when the world is created. It can be changed
+     * afterwards with {@code /worldborder} like in any other world.
+     */
+    public boolean limitWorldToImage = false;
     public List<BiomeColor> customBiomes = new ArrayList<>();
 
     // Height map image

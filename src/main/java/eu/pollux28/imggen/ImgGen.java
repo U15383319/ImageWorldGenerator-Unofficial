@@ -5,6 +5,7 @@ import com.mojang.serialization.MapCodec;
 import eu.pollux28.imggen.command.ImgGenCommand;
 import eu.pollux28.imggen.config.ImgGenConfig;
 import eu.pollux28.imggen.image.ImageFiles;
+import eu.pollux28.imggen.world.ImageWorldSetup;
 import eu.pollux28.imggen.world.biome.ImgGenBiomeSource;
 import eu.pollux28.imggen.world.chunk.ImgGenChunkGenerator;
 import net.minecraft.core.registries.Registries;
@@ -40,6 +41,7 @@ public final class ImgGen {
         BIOME_SOURCES.register(modBus);
         CHUNK_GENERATORS.register(modBus);
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, event -> ImgGenCommand.register(event.getDispatcher()));
+        NeoForge.EVENT_BUS.addListener(ImageWorldSetup::onCreateSpawnPosition);
 
         // Create the config file and image folder up front so players find them before making a world.
         ImgGenConfig.load();
