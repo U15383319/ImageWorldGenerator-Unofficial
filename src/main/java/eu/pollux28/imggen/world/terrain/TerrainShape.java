@@ -97,7 +97,9 @@ public enum TerrainShape {
         if (biome.is(Tags.Biomes.IS_MOUNTAIN_SLOPE)) {
             return SLOPE;
         }
-        if (biome.is(BiomeTags.IS_MOUNTAIN) || biome.is(BiomeTags.IS_BADLANDS) || biome.is(Tags.Biomes.IS_PLATEAU)) {
+        // Mountains without the finer peak or slope tag: tall, but not jagged.
+        if (biome.is(BiomeTags.IS_MOUNTAIN) || biome.is(Tags.Biomes.IS_MOUNTAIN)
+                || biome.is(BiomeTags.IS_BADLANDS) || biome.is(Tags.Biomes.IS_PLATEAU)) {
             return PLATEAU;
         }
         if (biome.is(BiomeTags.IS_HILL) || biome.is(Tags.Biomes.IS_WINDSWEPT) || biome.is(Tags.Biomes.IS_HILL)) {
