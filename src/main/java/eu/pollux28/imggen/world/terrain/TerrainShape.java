@@ -16,9 +16,11 @@ import java.util.Locale;
  * <ul>
  *     <li><b>targets</b>: the range a parameter is pulled into. Targets of neighbouring shapes are blended,
  *     which is what makes borders slope instead of step. {@code null} leaves the vanilla noise alone.</li>
- *     <li><b>limits</b>: bounds the parameter may never leave on a column painted with this shape, applied
- *     after blending. They keep water under water and land dry right up to the painted border, however
- *     narrow the feature and whatever lies next to it.</li>
+ *     <li><b>limits</b>: bounds the parameter may not leave on a column painted with this shape, applied
+ *     after blending. They exist for one purpose only: water stays under water and land stays dry, right
+ *     up to the painted shoreline and however narrow the feature. How high or rugged land is remains a
+ *     matter of blending alone, which is why all kinds of land share the same limits; limits that differed
+ *     between neighbouring kinds of land would cut steps and needles into the terrain.</li>
  * </ul>
  *
  * <p>The numbers come from vanilla's terrain spline. Roughly: continentalness up to -0.18 is sea floor and
@@ -28,24 +30,36 @@ import java.util.Locale;
  */
 public enum TerrainShape {
     /** Not painted, or a biome that should keep vanilla terrain. */
-    UNSHAPED(null, null, null, Limits.ANY, Limits.ANY, Limits.ANY),
+    UNSHAPED(Surface.NONE, 1, null, null, null, Limits.ANY, Limits.ANY, Limits.ANY),
     /** Columns of this shape are emptied completely after generation. */
-    VOID(null, null, null, Limits.ANY, Limits.ANY, Limits.ANY),
-    DEEP_OCEAN(range(-0.95F, -0.60F), null, null, atMost(-0.50F), Limits.ANY, Limits.ANY),
-    OCEAN(range(-0.42F, -0.25F), null, null, atMost(-0.19F), Limits.ANY, Limits.ANY),
-    RIVER(range(-0.05F, 0.10F), range(0.00F, 0.30F), range(0.0F, 0.0F), range(-0.15F, 0.10F), range(-0.25F, 0.35F), range(-0.04F, 0.04F)),
-    SHORE(range(-0.14F, -0.10F), range(0.00F, 0.30F), range(0.20F, 0.30F), range(-0.15F, -0.05F), range(-0.10F, 0.40F), range(0.15F, 0.35F)),
-    WETLAND(range(-0.05F, 0.20F), range(0.60F, 0.90F), range(0.12F, 0.30F), atLeast(-0.15F), atLeast(0.45F), atLeast(0.10F)),
-    LOWLAND(range(0.00F, 0.30F), range(-0.15F, 0.35F), range(0.20F, 0.50F), Limits.DRY_LAND, atMost(0.40F), Limits.NO_VALLEY),
-    HILLS(range(0.10F, 0.50F), range(-0.45F, -0.10F), range(0.30F, 0.60F), Limits.DRY_LAND, atMost(0.40F), Limits.NO_VALLEY),
-    PLATEAU(range(0.15F, 0.60F), range(-0.75F, -0.40F), range(0.20F, 0.40F), Limits.DRY_LAND, atMost(0.40F), Limits.NO_VALLEY),
-    SLOPE(range(0.20F, 0.70F), range(-0.80F, -0.45F), range(0.40F, 0.56F), Limits.DRY_LAND, atMost(0.40F), Limits.NO_VALLEY),
-    PEAK(range(0.35F, 0.90F), range(-1.00F, -0.60F), range(0.57F, 0.76F), Limits.DRY_LAND, atMost(0.40F), Limits.NO_VALLEY);
+    VOID(Surface.NONE, 1, null, null, null, Limits.ANY, Limits.ANY, Limits.ANY),
+    DEEP_OCEAN(Surface.SEA, 1, range(-0.95F, -0.60F), null, null, atMost(-0.50F), Limits.ANY, Limits.ANY),
+    OCEAN(Surface.SEA, 1, range(-0.42F, -0.25F), null, null, atMost(-0.19F), Limits.ANY, Limits.ANY),
+    RIVER(Surface.RIVER, 1, range(-0.05F, 0.10F), range(0.00F, 0.30F), range(0.0F, 0.0F), range(-0.15F, 0.10F), range(-0.25F, 0.35F), range(-0.04F, 0.04F)),
+    /** Often painted as a thin line, so it counts double when blending instead of being forced flat. */
+    SHORE(Surface.LAND, 2, range(-0.14F, -0.10F), range(0.00F, 0.30F), range(0.20F, 0.30F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY),
+    /** Meant to be waterlogged: the only land that may sit at sea level. */
+    WETLAND(Surface.LAND, 1, range(-0.05F, 0.20F), range(0.60F, 0.90F), range(0.12F, 0.30F), Limits.DRY_LAND, Limits.ANY, atLeast(0.10F)),
+    LOWLAND(Surface.LAND, 1, range(0.00F, 0.30F), range(-0.15F, 0.35F), range(0.20F, 0.50F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY),
+    HILLS(Surface.LAND, 1, range(0.10F, 0.50F), range(-0.45F, -0.10F), range(0.30F, 0.60F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY),
+    PLATEAU(Surface.LAND, 1, range(0.15F, 0.60F), range(-0.75F, -0.40F), range(0.20F, 0.40F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY),
+    SLOPE(Surface.LAND, 1, range(0.20F, 0.70F), range(-0.80F, -0.45F), range(0.40F, 0.56F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY),
+    PEAK(Surface.LAND, 1, range(0.35F, 0.90F), range(-1.00F, -0.60F), range(0.57F, 0.76F), Limits.DRY_LAND, Limits.NOT_FLOODED, Limits.NO_VALLEY);
+
+    /** What a column of a shape is at sea level; the one thing about the image that terrain follows exactly. */
+    enum Surface {
+        NONE,
+        SEA,
+        RIVER,
+        LAND
+    }
 
     /** Inclusive range of a climate parameter. */
     public record Range(float min, float max) {
     }
 
+    private final Surface surface;
+    private final int blendWeight;
     @Nullable
     private final Range continentalness;
     @Nullable
@@ -57,6 +71,8 @@ public enum TerrainShape {
     private final Range weirdnessLimit;
 
     TerrainShape(
+            Surface surface,
+            int blendWeight,
             @Nullable Range continentalness,
             @Nullable Range erosion,
             @Nullable Range weirdness,
@@ -64,12 +80,23 @@ public enum TerrainShape {
             Range erosionLimit,
             Range weirdnessLimit
     ) {
+        this.surface = surface;
+        this.blendWeight = blendWeight;
         this.continentalness = continentalness;
         this.erosion = erosion;
         this.weirdness = weirdness;
         this.continentalnessLimit = continentalnessLimit;
         this.erosionLimit = erosionLimit;
         this.weirdnessLimit = weirdnessLimit;
+    }
+
+    Surface surface() {
+        return surface;
+    }
+
+    /** How many times a column of this shape counts when the targets of a neighbourhood are averaged. */
+    int blendWeight() {
+        return blendWeight;
     }
 
     /** @return the range the parameter is pulled into, or {@code null} to leave the vanilla noise alone */
@@ -158,6 +185,8 @@ public enum TerrainShape {
         static final Range ANY = new Range(Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY);
         /** Continentalness from which the vanilla spline produces land. */
         static final Range DRY_LAND = new Range(-0.15F, Float.POSITIVE_INFINITY);
+        /** Erosion low enough that flat land does not sink to sea level. */
+        static final Range NOT_FLOODED = new Range(Float.NEGATIVE_INFINITY, 0.40F);
         /** Weirdness high enough to stay clear of the river valley around 0. */
         static final Range NO_VALLEY = new Range(0.20F, Float.POSITIVE_INFINITY);
     }

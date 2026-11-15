@@ -51,7 +51,17 @@ public final class ImageTerrain {
     private static final int LIMIT_MIN = 3;
     private static final int LIMIT_MAX = 4;
     private static final int RIVER = 3 * VALUES_PER_PARAMETER;
-    private static final float[] NO_INFLUENCE = withoutLimits(new float[RIVER + 1]);
+    private static final int LIMIT_STRENGTH = RIVER + 1;
+    private static final float[] NO_INFLUENCE = withoutLimits(new float[LIMIT_STRENGTH + 1]);
+    /**
+     * Share of a column's immediate surroundings that has to agree with it on being sea, river or land
+     * before its limits apply at all, and from which they apply in full. A lone pixel scores 0.25 and is
+     * treated as noise; a line one pixel wide scores 0.5. Without this, a stray "ocean" pixel on a mountain
+     * would drill a well down to sea level.
+     */
+    private static final float AGREEMENT_START = 0.25F;
+    private static final float AGREEMENT_FULL = 0.5F;
+    private static final int[] AGREEMENT_KERNEL = {1, 2, 1};
     private static final int CACHE_SIZE = 256;
 
     private final ImgGenBiomeSource biomeSource;
@@ -80,8 +90,12 @@ public final class ImageTerrain {
             value = Mth.lerp(strength, vanilla, target);
         }
 
-        // The blend may not carry a column across what its own biome stands for, such as the shoreline.
-        value = Mth.clamp(value, blend[parameter.offset + LIMIT_MIN], blend[parameter.offset + LIMIT_MAX]);
+        // The blend may not carry a column across the shoreline its own biome stands on.
+        float limitStrength = blend[LIMIT_STRENGTH];
+        if (limitStrength > 0) {
+            double limited = Mth.clamp(value, blend[parameter.offset + LIMIT_MIN], blend[parameter.offset + LIMIT_MAX]);
+            value = Mth.lerp(limitStrength, value, limited);
+        }
 
         if (parameter == Parameter.WEIRDNESS && blend[RIVER] > RIVER_START) {
             // Weirdness 0 is what carves a river valley; force it wherever river dominates the neighbourhood.
@@ -108,7 +122,9 @@ public final class ImageTerrain {
 
     private static float[] computeBlend(Shapes shapes, int blockX, int blockZ) {
         Parameter[] parameters = Parameter.values();
-        float[] sums = new float[RIVER + 1];
+        float[] sums = new float[LIMIT_STRENGTH + 1];
+        TerrainShape own = shapes.at(blockX, blockZ);
+        int agreement = 0;
         float totalWeight = 0;
         float totalValleyWeight = 0;
         boolean influenced = false;
@@ -116,7 +132,10 @@ public final class ImageTerrain {
         for (int offsetX = -KERNEL_RADIUS; offsetX <= KERNEL_RADIUS; offsetX++) {
             for (int offsetZ = -KERNEL_RADIUS; offsetZ <= KERNEL_RADIUS; offsetZ++) {
                 TerrainShape shape = shapes.at(blockX + offsetX * SAMPLE_SPACING, blockZ + offsetZ * SAMPLE_SPACING);
-                float weight = KERNEL[offsetX + KERNEL_RADIUS] * KERNEL[offsetZ + KERNEL_RADIUS];
+                float weight = KERNEL[offsetX + KERNEL_RADIUS] * KERNEL[offsetZ + KERNEL_RADIUS] * shape.blendWeight();
+                if (Math.abs(offsetX) <= 1 && Math.abs(offsetZ) <= 1 && shape.surface() == own.surface()) {
+                    agreement += AGREEMENT_KERNEL[offsetX + 1] * AGREEMENT_KERNEL[offsetZ + 1];
+                }
                 float valleyWeight = shape == TerrainShape.RIVER ? weight * RIVER_WEIGHT : weight;
                 totalWeight += weight;
                 totalValleyWeight += valleyWeight;
@@ -141,7 +160,6 @@ public final class ImageTerrain {
             return NO_INFLUENCE;
         }
 
-        TerrainShape own = shapes.at(blockX, blockZ);
         for (Parameter parameter : parameters) {
             float weight = sums[parameter.offset + STRENGTH];
             if (weight > 0) {
@@ -154,6 +172,7 @@ public final class ImageTerrain {
             sums[parameter.offset + LIMIT_MAX] = limit.max();
         }
         sums[RIVER] /= totalValleyWeight;
+        sums[LIMIT_STRENGTH] = Mth.clamp((agreement / 16.0F - AGREEMENT_START) / (AGREEMENT_FULL - AGREEMENT_START), 0.0F, 1.0F);
         return sums;
     }
 
