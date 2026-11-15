@@ -3,10 +3,12 @@ package eu.pollux28.imggen.world.biome;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import eu.pollux28.imggen.ImgGen;
+import eu.pollux28.imggen.config.BiomeColorFile;
 import eu.pollux28.imggen.config.ImgGenConfig;
 import eu.pollux28.imggen.image.ColorTable;
 import eu.pollux28.imggen.image.ImageFiles;
 import eu.pollux28.imggen.image.IndexedImage;
+import eu.pollux28.imggen.world.terrain.TerrainShape;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.QuartPos;
@@ -23,6 +25,10 @@ import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.stream.Stream;
@@ -111,6 +117,11 @@ public final class ImgGenBiomeSource extends BiomeSource {
             }
         }
         return config().continuousGen ? null : colors().defaultBiome;
+    }
+
+    /** Terrain and dimension of biomes, including the overrides of the user. */
+    public BiomeProfiles profiles() {
+        return colors().profiles;
     }
 
     public Holder<Biome> defaultBiome() {
@@ -202,11 +213,70 @@ public final class ImgGenBiomeSource extends BiomeSource {
             biomes.get(entry.biome()).ifPresent(biome -> table.register(entry.rgb(), biome));
         }
 
+        BiomeProfiles profiles = readColorFile(table);
+
         Holder<Biome> defaultBiome = findBiome(current.defaultBiome).map(biome -> (Holder<Biome>) biome).orElseGet(() -> {
             ImgGen.LOGGER.error("Default biome '{}' does not exist, using minecraft:ocean", current.defaultBiome);
             return biomes.getOrThrow(Biomes.OCEAN);
         });
-        return new Colors(table, defaultBiome);
+        return new Colors(table, defaultBiome, profiles);
+    }
+
+    /**
+     * Adds the colours of {@code imggen/biome_colors.json}, if the user created it, behind all others and
+     * collects the behaviour overrides it contains.
+     */
+    private BiomeProfiles readColorFile(ColorTable<Holder<Biome>> table) {
+        BiomeColorFile file;
+        try {
+            file = BiomeColorFile.load();
+        } catch (IOException e) {
+            ImgGen.LOGGER.error("Could not read {}; it is ignored for this world", BiomeColorFile.path(), e);
+            return BiomeProfiles.TAGS_ONLY;
+        }
+        if (file == null) {
+            return BiomeProfiles.TAGS_ONLY;
+        }
+
+        Map<Holder<Biome>, TerrainShape> terrain = new HashMap<>();
+        Map<Holder<Biome>, BiomeDimension> dimensions = new HashMap<>();
+        int missing = 0;
+        for (BiomeColorFile.Entry entry : file.biomes) {
+            Optional<Holder.Reference<Biome>> biome = findBiome(entry.biome);
+            if (biome.isEmpty()) {
+                missing++; // Usually a biome of a mod that is not installed right now.
+                continue;
+            }
+
+            if (entry.color != null) {
+                OptionalInt rgb = ColorTable.parseColor(entry.color);
+                if (rgb.isEmpty()) {
+                    ImgGen.LOGGER.error("Biome {} has an invalid colour '{}' in {}", entry.biome, entry.color, BiomeColorFile.path().getFileName());
+                } else {
+                    table.register(rgb.getAsInt(), biome.get());
+                }
+            }
+            if (entry.terrain != null && !entry.terrain.isBlank()) {
+                TerrainShape shape = TerrainShape.byName(entry.terrain);
+                if (shape == null) {
+                    ImgGen.LOGGER.error("Biome {} has an unknown terrain '{}'; use one of {}", entry.biome, entry.terrain, Arrays.toString(TerrainShape.values()));
+                } else {
+                    terrain.put(biome.get(), shape);
+                }
+            }
+            if (entry.dimension != null && !entry.dimension.isBlank()) {
+                BiomeDimension dimension = BiomeDimension.byName(entry.dimension);
+                if (dimension == null) {
+                    ImgGen.LOGGER.error("Biome {} has an unknown dimension '{}'; use one of {}", entry.biome, entry.dimension, Arrays.toString(BiomeDimension.values()));
+                } else {
+                    dimensions.put(biome.get(), dimension);
+                }
+            }
+        }
+        if (missing > 0) {
+            ImgGen.LOGGER.info("{} biome(s) listed in {} do not exist in this game and were skipped", missing, BiomeColorFile.path().getFileName());
+        }
+        return new BiomeProfiles(terrain, dimensions);
     }
 
     private Optional<Holder.Reference<Biome>> findBiome(String id) {
@@ -214,6 +284,6 @@ public final class ImgGenBiomeSource extends BiomeSource {
         return location == null ? Optional.empty() : biomes.get(ResourceKey.create(Registries.BIOME, location));
     }
 
-    private record Colors(ColorTable<Holder<Biome>> table, Holder<Biome> defaultBiome) {
+    private record Colors(ColorTable<Holder<Biome>> table, Holder<Biome> defaultBiome, BiomeProfiles profiles) {
     }
 }

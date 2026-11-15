@@ -5,5 +5,7 @@
   "commands.imggen.debug.pixel": "Biome image pixel %s, %s, painted as %s",
   "commands.imggen.debug.outside_image": "Outside the biome image",
   "commands.imggen.debug.terrain": "Terrain shape: %s",
-  "commands.imggen.debug.height": "Height map: Y %s"
+  "commands.imggen.debug.height": "Height map: Y %s",
+  "commands.imggen.colors.done": "Assigned colours to %s new biome(s), %s biomes in total. Colour file: %s - reference sheet: %s. Takes effect the next time a world is loaded.",
+  "commands.imggen.colors.failed": "Could not update the biome colour file: %s"
 }

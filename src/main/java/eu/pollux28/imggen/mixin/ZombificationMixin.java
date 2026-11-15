@@ -2,7 +2,8 @@ package eu.pollux28.imggen.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import eu.pollux28.imggen.ImgGen;
-import net.minecraft.tags.BiomeTags;
+import eu.pollux28.imggen.world.biome.BiomeDimension;
+import eu.pollux28.imggen.world.chunk.ImgGenChunkGenerator;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.hoglin.Hoglin;
 import net.minecraft.world.entity.monster.piglin.AbstractPiglin;
@@ -18,7 +19,8 @@ public abstract class ZombificationMixin {
             return false;
         }
         Entity self = (Entity) (Object) this;
-        return ImgGen.imageGenerator(self.level()) == null
-                || !self.level().getBiome(self.blockPosition()).is(BiomeTags.IS_NETHER);
+        ImgGenChunkGenerator generator = ImgGen.imageGenerator(self.level());
+        return generator == null
+                || generator.biomeProfiles().dimension(self.level().getBiome(self.blockPosition())) != BiomeDimension.NETHER;
     }
 }

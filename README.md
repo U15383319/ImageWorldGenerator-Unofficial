@@ -14,8 +14,12 @@ the [`1.20.1-fabric`](../../tree/1.20.1-fabric) branch.
 3. Create a world with the world type **Image World**. On a dedicated server set `level-type=imggen\:imggen`
    in `server.properties`.
 
-Images are centred on the world origin. `/imggen debug [pos]` (operators only) shows which pixel, painted biome,
-actual biome and terrain shape apply to a position.
+Images are centred on the world origin.
+
+Commands (operators only):
+
+- `/imggen debug [pos]` shows which pixel, painted biome, actual biome and terrain shape apply to a position.
+- `/imggen colors` gives every biome without a colour one of its own, see [Other mods](#other-mods).
 
 ### Biome image
 
@@ -52,8 +56,26 @@ pixel (0-255) is the surface Y, and everything below `seaLevel` is flooded.
 
 ### Other mods
 
-- Biomes of other mods are painted through `customBiomes`. Their terrain is chosen from their biome tags;
-  a biome without the usual tags is treated as ordinary lowland.
+- Biomes of other mods have no built-in colour. Either list them in `customBiomes`, or run `/imggen colors`
+  in any world: it assigns a colour to every biome that has none and writes two files into `imggen/`:
+  - `biome_colors.html`, a sheet of all biomes with their colours to pick from while painting;
+  - `biome_colors.json`, the assigned colours. From then on it is read on every world load, after
+    `customBiomes` and the built-in colours. Existing entries are never changed, running the command again
+    only adds biomes of newly installed mods. Edit a colour by hand if you like.
+
+  Note that more known colours also means that inexact colours of an image (anti-aliasing, JPEG artefacts)
+  may now land on one of these biomes instead of a vanilla one.
+- The terrain of a biome is chosen from its biome tags, and so is whether it counts as a Nether or End
+  biome. A biome without the usual tags is treated as ordinary overworld lowland. Each entry of
+  `biome_colors.json` can override both with two optional fields:
+
+  ```json
+  { "biome": "somemod:crag", "color": "0x7A5C3E", "terrain": "peak", "dimension": "overworld" }
+  ```
+
+  `terrain` is one of `deep_ocean`, `ocean`, `river`, `shore`, `wetland`, `lowland`, `hills`, `plateau`,
+  `slope`, `peak`, `void` or `unshaped` (leave the vanilla terrain alone); `dimension` is `overworld`,
+  `nether` or `end`. Entries may be added for vanilla biomes too, and `color` can be left out there.
 - With [TerraBlender](https://github.com/Glitchfiend/TerraBlender) installed, biomes of mods built on it
   (Biomes O' Plenty and others) get the surface blocks those mods define. Without TerraBlender nothing
   changes; it is optional.
