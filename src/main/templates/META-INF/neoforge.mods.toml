@@ -29,3 +29,11 @@ type = "required"
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
+
+# Optional: surface rules of TerraBlender based biome mods are applied to image worlds.
+[[dependencies.${mod_id}]]
+modId = "terrablender"
+type = "optional"
+versionRange = "[4.1,)"
+ordering = "AFTER"
+side = "BOTH"

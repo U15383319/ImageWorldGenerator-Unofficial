@@ -1,11 +1,17 @@
 package eu.pollux28.imggen.world.chunk;
 
+import eu.pollux28.imggen.compat.TerraBlenderCompat;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Noises;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.VerticalAnchor;
+
+import javax.annotation.Nullable;
+import java.util.Arrays;
+import java.util.Objects;
 
 /** Surface rules for biomes that normally never appear in the overworld. */
 final class ImageBiomeSurfaceRules {
@@ -27,21 +33,25 @@ final class ImageBiomeSurfaceRules {
     private ImageBiomeSurfaceRules() {
     }
 
-    /** Puts the surface of Nether, End and deep dark biomes in front of the base rule, which only knows the dimension it was written for. */
-    static SurfaceRules.RuleSource create(SurfaceRules.RuleSource overworldRule, int seaLevel) {
-        SurfaceRules.ConditionSource netherBiome = SurfaceRules.isBiome(
+    /**
+     * Puts the surface of Nether, End and deep dark biomes in front of the overworld rule, which only
+     * knows the dimension it was written for.
+     *
+     * @param netherRule surface rule of the real Nether, used for Nether biomes of other mods
+     * @param endRule    surface rule of the real End, used for End biomes of other mods
+     */
+    static SurfaceRules.RuleSource create(
+            SurfaceRules.RuleSource overworldRule,
+            @Nullable SurfaceRules.RuleSource netherRule,
+            @Nullable SurfaceRules.RuleSource endRule,
+            int seaLevel
+    ) {
+        SurfaceRules.ConditionSource vanillaNetherBiome = SurfaceRules.isBiome(
                 Biomes.NETHER_WASTES,
                 Biomes.SOUL_SAND_VALLEY,
                 Biomes.CRIMSON_FOREST,
                 Biomes.WARPED_FOREST,
                 Biomes.BASALT_DELTAS
-        );
-        SurfaceRules.ConditionSource endBiome = SurfaceRules.isBiome(
-                Biomes.THE_END,
-                Biomes.SMALL_END_ISLANDS,
-                Biomes.END_MIDLANDS,
-                Biomes.END_HIGHLANDS,
-                Biomes.END_BARRENS
         );
         SurfaceRules.RuleSource bedrockFloor = SurfaceRules.ifTrue(
                 SurfaceRules.verticalGradient(
@@ -57,16 +67,34 @@ final class ImageBiomeSurfaceRules {
                         SurfaceRules.isBiome(Biomes.DEEP_DARK),
                         SurfaceRules.ifTrue(SurfaceRules.ON_FLOOR, SCULK)
                 ),
+                // The vanilla Nether rule is tied to the Nether's heights, so vanilla biomes get an adapted copy.
                 SurfaceRules.ifTrue(
-                        netherBiome,
+                        vanillaNetherBiome,
                         SurfaceRules.sequence(bedrockFloor, createNetherSurfaceRule(seaLevel))
                 ),
+                // Biomes of other mods bring their own surface inside the rule of their home dimension.
                 SurfaceRules.ifTrue(
-                        endBiome,
-                        SurfaceRules.sequence(bedrockFloor, END_STONE)
+                        new BiomeTagCondition(BiomeTags.IS_NETHER),
+                        sequence(
+                                bedrockFloor,
+                                netherRule == null ? null : TerraBlenderCompat.withModdedRules(TerraBlenderCompat.Dimension.NETHER, netherRule),
+                                NETHERRACK
+                        )
                 ),
-                overworldRule
+                SurfaceRules.ifTrue(
+                        new BiomeTagCondition(BiomeTags.IS_END),
+                        sequence(
+                                bedrockFloor,
+                                endRule == null ? null : TerraBlenderCompat.withModdedRules(TerraBlenderCompat.Dimension.END, endRule),
+                                END_STONE
+                        )
+                ),
+                TerraBlenderCompat.withModdedRules(TerraBlenderCompat.Dimension.OVERWORLD, overworldRule)
         );
+    }
+
+    private static SurfaceRules.RuleSource sequence(SurfaceRules.RuleSource... rules) {
+        return SurfaceRules.sequence(Arrays.stream(rules).filter(Objects::nonNull).toArray(SurfaceRules.RuleSource[]::new));
     }
 
     /** Vanilla Nether surface rule without the bedrock roof, and with its fixed heights made relative to sea level. */

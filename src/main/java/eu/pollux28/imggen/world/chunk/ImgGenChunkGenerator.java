@@ -13,11 +13,13 @@ import eu.pollux28.imggen.world.terrain.TerrainShape;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.tags.BiomeTags;
@@ -39,6 +41,7 @@ import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureSet;
@@ -66,7 +69,8 @@ import java.util.concurrent.CompletableFuture;
 public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
     public static final MapCodec<ImgGenChunkGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             BiomeSource.CODEC.fieldOf("biome_source").forGetter(ChunkGenerator::getBiomeSource),
-            NoiseGeneratorSettings.CODEC.fieldOf("settings").forGetter(generator -> generator.baseSettings)
+            NoiseGeneratorSettings.CODEC.fieldOf("settings").forGetter(generator -> generator.baseSettings),
+            RegistryOps.retrieveGetter(Registries.NOISE_SETTINGS)
     ).apply(instance, instance.stable(ImgGenChunkGenerator::new)));
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
@@ -90,16 +94,31 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
     @Nullable
     private volatile ImageStructures imageStructures;
 
-    public ImgGenChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> settings) {
-        this(biomeSource, settings, ImgGenConfig.load());
+    /**
+     * @param noiseSettings all registered noise settings; the surface rules of the real Nether and End
+     *                      are borrowed from here for biomes of those dimensions painted into the image
+     */
+    public ImgGenChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> settings, HolderGetter<NoiseGeneratorSettings> noiseSettings) {
+        this(biomeSource, settings, noiseSettings, ImgGenConfig.load());
     }
 
-    private ImgGenChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> settings, ImgGenConfig config) {
-        this(biomeSource, settings, config, createTerrain(biomeSource, config));
+    private ImgGenChunkGenerator(
+            BiomeSource biomeSource,
+            Holder<NoiseGeneratorSettings> settings,
+            HolderGetter<NoiseGeneratorSettings> noiseSettings,
+            ImgGenConfig config
+    ) {
+        this(biomeSource, settings, noiseSettings, config, createTerrain(biomeSource, config));
     }
 
-    private ImgGenChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> settings, ImgGenConfig config, @Nullable ImageTerrain terrain) {
-        super(biomeSource, Holder.direct(createEffectiveSettings(settings.value(), config, terrain)));
+    private ImgGenChunkGenerator(
+            BiomeSource biomeSource,
+            Holder<NoiseGeneratorSettings> settings,
+            HolderGetter<NoiseGeneratorSettings> noiseSettings,
+            ImgGenConfig config,
+            @Nullable ImageTerrain terrain
+    ) {
+        super(biomeSource, Holder.direct(createEffectiveSettings(settings.value(), noiseSettings, config, terrain)));
         this.baseSettings = settings;
         this.config = config;
         this.imageBiomes = biomeSource instanceof ImgGenBiomeSource source ? source : null;
@@ -115,7 +134,12 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
         return null;
     }
 
-    private static NoiseGeneratorSettings createEffectiveSettings(NoiseGeneratorSettings base, ImgGenConfig config, @Nullable ImageTerrain terrain) {
+    private static NoiseGeneratorSettings createEffectiveSettings(
+            NoiseGeneratorSettings base,
+            HolderGetter<NoiseGeneratorSettings> noiseSettings,
+            ImgGenConfig config,
+            @Nullable ImageTerrain terrain
+    ) {
         int seaLevel = config.customHeightMap ? config.seaLevel : base.seaLevel();
         NoiseRouter router = terrain != null ? ImageClimateFunction.steer(base.noiseRouter(), terrain) : base.noiseRouter();
 
@@ -124,7 +148,12 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                 base.defaultBlock(),
                 base.defaultFluid(),
                 router,
-                ImageBiomeSurfaceRules.create(base.surfaceRule(), seaLevel),
+                ImageBiomeSurfaceRules.create(
+                        base.surfaceRule(),
+                        surfaceRuleOf(noiseSettings, NoiseGeneratorSettings.NETHER),
+                        surfaceRuleOf(noiseSettings, NoiseGeneratorSettings.END),
+                        seaLevel
+                ),
                 base.spawnTarget(),
                 seaLevel,
                 base.disableMobGeneration(),
@@ -132,6 +161,11 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                 base.oreVeinsEnabled(),
                 base.useLegacyRandomSource()
         );
+    }
+
+    @Nullable
+    private static SurfaceRules.RuleSource surfaceRuleOf(HolderGetter<NoiseGeneratorSettings> noiseSettings, ResourceKey<NoiseGeneratorSettings> key) {
+        return noiseSettings.get(key).map(settings -> settings.value().surfaceRule()).orElse(null);
     }
 
     @Override

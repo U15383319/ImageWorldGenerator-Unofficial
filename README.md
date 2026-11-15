@@ -50,6 +50,17 @@ pixel (0-255) is the surface Y, and everything below `seaLevel` is flooded.
 - `useBlackList` with `structureBlacklist`: structures that must not generate. `blackListApplication`
   selects where it applies: `0` vanilla placement, `1` the structure image, `2` both.
 
+### Other mods
+
+- Biomes of other mods are painted through `customBiomes`. Their terrain is chosen from their biome tags;
+  a biome without the usual tags is treated as ordinary lowland.
+- With [TerraBlender](https://github.com/Glitchfiend/TerraBlender) installed, biomes of mods built on it
+  (Biomes O' Plenty and others) get the surface blocks those mods define. Without TerraBlender nothing
+  changes; it is optional.
+- Nether and End biomes of other mods use the surface rules of the real Nether and End, so their own
+  blocks appear when painted into the overworld.
+- Outside the image, vanilla generation only produces vanilla biomes.
+
 ### Other options
 
 | Option | Meaning |
