@@ -77,6 +77,11 @@ dependencies {
     // Development only: a world map to inspect generated worlds in the dev client. Not part of the mod.
     runtimeOnly "xaero.map:xaeroworldmap-neoforge-${minecraft_version}:${xaero_worldmap_version}"
     runtimeOnly "xaero.lib:xaerolib-neoforge-${minecraft_version}:${xaero_lib_version}"
+
+    // Development only: a biome mod to try modded biomes with, and TerraBlender itself to run the integration.
+    runtimeOnly "com.github.glitchfiend:TerraBlender-neoforge:${minecraft_version}-${terrablender_version}"
+    runtimeOnly "com.github.glitchfiend:GlitchCore-neoforge:${minecraft_version}-${glitchcore_version}"
+    runtimeOnly "com.github.glitchfiend:BiomesOPlenty-neoforge:${minecraft_version}-${biomesoplenty_version}"
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
