@@ -1,7 +1,8 @@
 package eu.pollux28.imggen.world.chunk;
 
 import eu.pollux28.imggen.compat.TerraBlenderCompat;
-import net.minecraft.tags.BiomeTags;
+import eu.pollux28.imggen.world.biome.BiomeDimension;
+import eu.pollux28.imggen.world.biome.BiomeProfiles;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.levelgen.VerticalAnchor;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** Surface rules for biomes that normally never appear in the overworld. */
 final class ImageBiomeSurfaceRules {
@@ -39,11 +41,13 @@ final class ImageBiomeSurfaceRules {
      *
      * @param netherRule surface rule of the real Nether, used for Nether biomes of other mods
      * @param endRule    surface rule of the real End, used for End biomes of other mods
+     * @param profiles   tells which dimension a biome belongs to
      */
     static SurfaceRules.RuleSource create(
             SurfaceRules.RuleSource overworldRule,
             @Nullable SurfaceRules.RuleSource netherRule,
             @Nullable SurfaceRules.RuleSource endRule,
+            Supplier<BiomeProfiles> profiles,
             int seaLevel
     ) {
         SurfaceRules.ConditionSource vanillaNetherBiome = SurfaceRules.isBiome(
@@ -74,7 +78,7 @@ final class ImageBiomeSurfaceRules {
                 ),
                 // Biomes of other mods bring their own surface inside the rule of their home dimension.
                 SurfaceRules.ifTrue(
-                        new BiomeTagCondition(BiomeTags.IS_NETHER),
+                        new BiomeDimensionCondition(profiles, BiomeDimension.NETHER),
                         sequence(
                                 bedrockFloor,
                                 netherRule == null ? null : TerraBlenderCompat.withModdedRules(TerraBlenderCompat.Dimension.NETHER, netherRule),
@@ -82,7 +86,7 @@ final class ImageBiomeSurfaceRules {
                         )
                 ),
                 SurfaceRules.ifTrue(
-                        new BiomeTagCondition(BiomeTags.IS_END),
+                        new BiomeDimensionCondition(profiles, BiomeDimension.END),
                         sequence(
                                 bedrockFloor,
                                 endRule == null ? null : TerraBlenderCompat.withModdedRules(TerraBlenderCompat.Dimension.END, endRule),

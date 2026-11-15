@@ -156,7 +156,7 @@ public final class ImageTerrain {
             IndexedImage<Holder<Biome>> image = biomeSource.biomeImage();
             TerrainShape outside = biomeSource.config().continuousGen
                     ? TerrainShape.UNSHAPED
-                    : TerrainShape.of(biomeSource.defaultBiome());
+                    : biomeSource.profiles().terrain(biomeSource.defaultBiome());
             if (image == null) {
                 return new Shapes(null, new TerrainShape[0], outside);
             }
@@ -165,7 +165,7 @@ public final class ImageTerrain {
             TerrainShape[] byValueIndex = new TerrainShape[biomes.size()];
             for (int i = 0; i < byValueIndex.length; i++) {
                 Holder<Biome> biome = biomes.get(i);
-                byValueIndex[i] = biome == null ? TerrainShape.UNSHAPED : TerrainShape.of(biome);
+                byValueIndex[i] = biome == null ? TerrainShape.UNSHAPED : biomeSource.profiles().terrain(biome);
             }
             return new Shapes(image, byValueIndex, outside);
         }

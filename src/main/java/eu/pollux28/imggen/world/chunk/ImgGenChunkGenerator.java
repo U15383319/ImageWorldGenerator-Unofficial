@@ -5,6 +5,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import eu.pollux28.imggen.config.ImgGenConfig;
 import eu.pollux28.imggen.image.HeightImage;
 import eu.pollux28.imggen.image.ImageFiles;
+import eu.pollux28.imggen.world.biome.BiomeDimension;
+import eu.pollux28.imggen.world.biome.BiomeProfiles;
 import eu.pollux28.imggen.world.biome.ImgGenBiomeSource;
 import eu.pollux28.imggen.world.structure.ImageStructures;
 import eu.pollux28.imggen.world.terrain.ImageClimateFunction;
@@ -22,7 +24,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.WorldGenRegion;
-import net.minecraft.tags.BiomeTags;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 /**
  * The vanilla noise generator with three additions driven by the config:
@@ -118,7 +120,7 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
             ImgGenConfig config,
             @Nullable ImageTerrain terrain
     ) {
-        super(biomeSource, Holder.direct(createEffectiveSettings(settings.value(), noiseSettings, config, terrain)));
+        super(biomeSource, Holder.direct(createEffectiveSettings(settings.value(), noiseSettings, config, terrain, profilesOf(biomeSource))));
         this.baseSettings = settings;
         this.config = config;
         this.imageBiomes = biomeSource instanceof ImgGenBiomeSource source ? source : null;
@@ -138,7 +140,8 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
             NoiseGeneratorSettings base,
             HolderGetter<NoiseGeneratorSettings> noiseSettings,
             ImgGenConfig config,
-            @Nullable ImageTerrain terrain
+            @Nullable ImageTerrain terrain,
+            Supplier<BiomeProfiles> profiles
     ) {
         int seaLevel = config.customHeightMap ? config.seaLevel : base.seaLevel();
         NoiseRouter router = terrain != null ? ImageClimateFunction.steer(base.noiseRouter(), terrain) : base.noiseRouter();
@@ -152,6 +155,7 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                         base.surfaceRule(),
                         surfaceRuleOf(noiseSettings, NoiseGeneratorSettings.NETHER),
                         surfaceRuleOf(noiseSettings, NoiseGeneratorSettings.END),
+                        profiles,
                         seaLevel
                 ),
                 base.spawnTarget(),
@@ -161,6 +165,16 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                 base.oreVeinsEnabled(),
                 base.useLegacyRandomSource()
         );
+    }
+
+    /** Deferred: the colour file behind the profiles must not be read for generators that are never used. */
+    private static Supplier<BiomeProfiles> profilesOf(BiomeSource biomeSource) {
+        return biomeSource instanceof ImgGenBiomeSource source ? source::profiles : () -> BiomeProfiles.TAGS_ONLY;
+    }
+
+    /** Terrain and dimension of biomes in this world, including the overrides of the user. */
+    public BiomeProfiles biomeProfiles() {
+        return imageBiomes == null ? BiomeProfiles.TAGS_ONLY : imageBiomes.profiles();
     }
 
     @Nullable
@@ -323,6 +337,7 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
             return;
         }
 
+        BiomeProfiles profiles = imageBiomes.profiles();
         BlockState fluid = generatorSettings().value().defaultFluid();
         boolean replaceFluid = !fluid.getFluidState().isEmpty() && !fluid.is(Blocks.LAVA);
         ChunkPos chunkPos = chunk.getPos();
@@ -335,9 +350,9 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                     continue;
                 }
 
-                if (TerrainShape.of(biome) == TerrainShape.VOID) {
+                if (profiles.terrain(biome) == TerrainShape.VOID) {
                     forEachBlockInCell(chunk, cellX, cellZ, pos, state -> state.isAir() ? null : AIR);
-                } else if (replaceFluid && biome.is(BiomeTags.IS_NETHER)) {
+                } else if (replaceFluid && profiles.dimension(biome) == BiomeDimension.NETHER) {
                     forEachBlockInCell(chunk, cellX, cellZ, pos, state -> state == fluid ? LAVA : null);
                 }
             }
@@ -353,6 +368,7 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
             return;
         }
 
+        BiomeProfiles profiles = imageBiomes.profiles();
         BlockState defaultBlock = generatorSettings().value().defaultBlock();
         ChunkPos chunkPos = chunk.getPos();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -364,7 +380,11 @@ public final class ImgGenChunkGenerator extends NoiseBasedChunkGenerator {
                     continue;
                 }
 
-                BlockState replacement = biome.is(BiomeTags.IS_NETHER) ? NETHERRACK : biome.is(BiomeTags.IS_END) ? END_STONE : null;
+                BlockState replacement = switch (profiles.dimension(biome)) {
+                    case NETHER -> NETHERRACK;
+                    case END -> END_STONE;
+                    case OVERWORLD -> null;
+                };
                 if (replacement != null) {
                     forEachBlockInCell(chunk, cellX, cellZ, pos, state -> isOverworldStone(state, defaultBlock) ? replacement : null);
                 }

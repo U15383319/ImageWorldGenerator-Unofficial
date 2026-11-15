@@ -7,6 +7,7 @@ import net.minecraft.world.level.biome.Biomes;
 import net.neoforged.neoforge.common.Tags;
 
 import javax.annotation.Nullable;
+import java.util.Locale;
 
 /**
  * The kind of landscape a biome needs, expressed as the ranges of the vanilla climate parameters
@@ -67,7 +68,10 @@ public enum TerrainShape {
         return priority;
     }
 
-    /** Works for modded biomes too, as long as they carry the usual vanilla or common biome tags. */
+    /**
+     * The shape a biome gets from its tags. Works for modded biomes too, as long as they carry the usual
+     * vanilla or common biome tags; {@code BiomeProfiles} adds the overrides of the user on top.
+     */
     public static TerrainShape of(Holder<Biome> biome) {
         if (biome.is(Biomes.THE_VOID) || biome.is(Tags.Biomes.IS_VOID)) {
             return VOID;
@@ -100,6 +104,16 @@ public enum TerrainShape {
             return HILLS;
         }
         return LOWLAND;
+    }
+
+    /** @return the shape with that name, ignoring case, or {@code null} */
+    @Nullable
+    public static TerrainShape byName(String name) {
+        try {
+            return valueOf(name.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private static Range range(float min, float max) {

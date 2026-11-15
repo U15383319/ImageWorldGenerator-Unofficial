@@ -5,5 +5,7 @@
   "commands.imggen.debug.pixel": "对应群系图像素 %s, %s，绘制的群系为 %s",
   "commands.imggen.debug.outside_image": "位于群系图范围之外",
   "commands.imggen.debug.terrain": "地形类型：%s",
-  "commands.imggen.debug.height": "高度图：Y %s"
+  "commands.imggen.debug.height": "高度图：Y %s",
+  "commands.imggen.colors.done": "已为 %s 个新群系分配颜色，共 %s 个群系。颜色文件：%s，对照表：%s。下次加载世界时生效。",
+  "commands.imggen.colors.failed": "无法更新群系颜色文件：%s"
 }

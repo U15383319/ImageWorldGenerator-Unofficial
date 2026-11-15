@@ -5,5 +5,7 @@
   "commands.imggen.debug.pixel": "Pixel %s, %s de l'image des biomes, peint en %s",
   "commands.imggen.debug.outside_image": "En dehors de l'image des biomes",
   "commands.imggen.debug.terrain": "Type de terrain : %s",
-  "commands.imggen.debug.height": "Carte de hauteur : Y %s"
+  "commands.imggen.debug.height": "Carte de hauteur : Y %s",
+  "commands.imggen.colors.done": "Couleurs attribuées à %s nouveau(x) biome(s), %s biomes au total. Fichier : %s - tableau : %s. Pris en compte au prochain chargement du monde.",
+  "commands.imggen.colors.failed": "Impossible de mettre à jour le fichier des couleurs : %s"
 }
