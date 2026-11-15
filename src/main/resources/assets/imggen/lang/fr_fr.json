@@ -1,4 +1,9 @@
 {
-  "generator.imggen": "ImgGen",
-  "generator.imggen.imggen": "ImgGen"
+  "generator.imggen.imggen": "Monde image",
+  "commands.imggen.not_image_world": "Cette dimension n'est pas générée par Image World Generator",
+  "commands.imggen.debug.biome": "Biome en %s, %s : %s",
+  "commands.imggen.debug.pixel": "Pixel %s, %s de l'image des biomes, peint en %s",
+  "commands.imggen.debug.outside_image": "En dehors de l'image des biomes",
+  "commands.imggen.debug.terrain": "Type de terrain : %s",
+  "commands.imggen.debug.height": "Carte de hauteur : Y %s"
 }

@@ -1,73 +1,55 @@
 package eu.pollux28.imggen;
 
-import eu.pollux28.imggen.command.Commands;
-import eu.pollux28.imggen.config.Config;
-import eu.pollux28.imggen.config.ConfigUtil;
-import eu.pollux28.imggen.config.MainConfigData;
-import eu.pollux28.imggen.gen.biomes.ImgGenBiomeSource;
-import eu.pollux28.imggen.gen.chunk.ImgGenChunkGenerator;
-import eu.pollux28.imggen.gen.density.ImageTerrainDensityFunction;
-import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import com.mojang.logging.LogUtils;
+import com.mojang.serialization.MapCodec;
+import eu.pollux28.imggen.command.ImgGenCommand;
+import eu.pollux28.imggen.config.ImgGenConfig;
+import eu.pollux28.imggen.image.ImageFiles;
+import eu.pollux28.imggen.world.biome.ImgGenBiomeSource;
+import eu.pollux28.imggen.world.chunk.ImgGenChunkGenerator;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.server.level.ServerLevel;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import javax.annotation.Nullable;
 
-public class ImgGen implements ModInitializer {
+@Mod(ImgGen.MOD_ID)
+public final class ImgGen {
     public static final String MOD_ID = "imggen";
-    public static final String VERSION = "2.0.0";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-    public static MainConfigData CONFIG;
+    public static final Logger LOGGER = LogUtils.getLogger();
 
-    public static ResourceLocation id(String path) {
-        return new ResourceLocation(MOD_ID, path);
+    private static final DeferredRegister<MapCodec<? extends BiomeSource>> BIOME_SOURCES =
+            DeferredRegister.create(Registries.BIOME_SOURCE, MOD_ID);
+    private static final DeferredRegister<MapCodec<? extends ChunkGenerator>> CHUNK_GENERATORS =
+            DeferredRegister.create(Registries.CHUNK_GENERATOR, MOD_ID);
+
+    static {
+        BIOME_SOURCES.register(MOD_ID, () -> ImgGenBiomeSource.CODEC);
+        CHUNK_GENERATORS.register(MOD_ID, () -> ImgGenChunkGenerator.CODEC);
     }
 
-    @Override
-    public void onInitialize() {
-        Config.init();
-        createImageDirectories();
+    public ImgGen(IEventBus modBus) {
+        BIOME_SOURCES.register(modBus);
+        CHUNK_GENERATORS.register(modBus);
+        NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, event -> ImgGenCommand.register(event.getDispatcher()));
 
-        Registry.register(BuiltInRegistries.BIOME_SOURCE, id("imggen"), ImgGenBiomeSource.CODEC);
-        Registry.register(BuiltInRegistries.CHUNK_GENERATOR, id("imggen"), ImgGenChunkGenerator.CODEC);
-        Registry.register(BuiltInRegistries.DENSITY_FUNCTION_TYPE, id("image_terrain"), ImageTerrainDensityFunction.CODEC.codec());
-
-        Commands.init();
-        ServerWorldEvents.LOAD.register((server, world) -> {
-            ChunkGenerator chunkGenerator = world.getChunkSource().getGenerator();
-            if (chunkGenerator instanceof ImgGenChunkGenerator imgGenChunkGenerator) {
-                refreshConfig();
-                imgGenChunkGenerator.reloadFromConfig();
-            }
-        });
+        // Create the config file and image folder up front so players find them before making a world.
+        ImgGenConfig.load();
+        ImageFiles.createImageDirectory();
     }
 
-    public static void ensureConfig() {
-        if (CONFIG == null) {
-            Config.init();
-        }
-    }
-
-    public static void refreshConfig() {
-        CONFIG = ConfigUtil.getFromConfig(MainConfigData.class, Paths.get("", "config", "imggen.json"));
-        if (CONFIG == null) {
-            CONFIG = new MainConfigData();
-        }
-    }
-
-    private void createImageDirectories() {
-        try {
-            Files.createDirectories(Paths.get("", "imggen", "image"));
-        } catch (IOException e) {
-            LOGGER.error("Could not create Image World Generator folders", e);
-        }
+    /** @return the generator of the level if it is an image world on the server side, otherwise {@code null} */
+    @Nullable
+    public static ImgGenChunkGenerator imageGenerator(Level level) {
+        return level instanceof ServerLevel serverLevel
+                && serverLevel.getChunkSource().getGenerator() instanceof ImgGenChunkGenerator generator ? generator : null;
     }
 }
