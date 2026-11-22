@@ -1,4 +1,4 @@
-# ImageWorldGenerator-Unofficial
+# Image World Generator: Repainted
 
 A NeoForge mod for Minecraft 1.21.1 that generates a world from images: one image paints the biomes (and
 with them the terrain), optional ones set exact heights and place structures.
