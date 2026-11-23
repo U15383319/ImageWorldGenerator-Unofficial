@@ -42,8 +42,10 @@ LGPL-3.0, the license of the original mod.
 - `logo.png`: 1000x1000 project icon, in the style of the original mod's icon
 - `images/`: pictures for the gallery of the project page. The description cannot refer to local files, so
   it contains none; upload them to the gallery instead.
-  - `painted-map.png` and `generated-world.png`: an input image and the world generated from it
-  - `map-to-world.png`: both halves in one picture
+  - `golden-apple-overview.png`: in-game screenshot of a world generated from the golden apple item texture,
+    scaled up 32 times (`biomesImageScale: 32`), seen from straight above in spectator mode
+  - `painted-map.png`: a biome image made for testing. There is no in-game screenshot of its world yet, so
+    it is only useful next to one.
 
 ## Links
 
